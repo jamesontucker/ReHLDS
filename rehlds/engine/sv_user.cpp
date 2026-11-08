@@ -81,7 +81,7 @@ static void LsVoice_Tell(int i, const char *what, double secs)
 // A voice packet from a player
 static void LsVoice_Packet(client_t *cl, int bytes)
 {
-	if (sv_ls_voice.value == 0.0f || cl->fakeclient)
+	if (sv_ls_voice.value == 0.0f || cl->fakeclient || !cl->active)
 		return;
 	int i = cl - g_psvs.clients;
 	if (i < 0 || i >= MAX_CLIENTS)
