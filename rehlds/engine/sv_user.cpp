@@ -622,6 +622,7 @@ void SV_AddLinksToPM_(areanode_t *node, float *pmove_mins, float *pmove_maxs)
 
 		// A full visible list does not keep the edict out of the collision lists (upstream
 		// 5d34e22, ported to this version of the function)
+		ve = nullptr;
 		if (pmove->numvisent < MAX_PHYSENTS)
 		{
 			ve = &pmove->visents[pmove->numvisent];
