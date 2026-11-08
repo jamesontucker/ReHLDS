@@ -64,7 +64,7 @@ cvar_t sv_voiceenable = { "sv_voiceenable", "1", FCVAR_SERVER | FCVAR_ARCHIVE, 0
 // stops talking (and every 10 s of a long one), the engine runs
 //   gm_voice <player index> start|still|stop <seconds> <bytes>
 // if a plugin has registered that command. sv_ls_voice 0 turns it off.
-cvar_t sv_ls_voice = { "sv_ls_voice", "1", FCVAR_SERVER, 0.0f, NULL };
+cvar_t sv_ls_voice = { "sv_ls_voice", "1", 0, 0.0f, NULL };	// (not a server rule: nothing changes for players)
 static double g_LsVoiceStart[MAX_CLIENTS], g_LsVoiceLast[MAX_CLIENTS], g_LsVoiceNoted[MAX_CLIENTS];
 static int g_LsVoiceBytes[MAX_CLIENTS];
 static bool g_LsVoiceOn[MAX_CLIENTS];
