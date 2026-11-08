@@ -119,26 +119,17 @@ const char *CTextConsoleWin32::GetLine()
 		unsigned long numread;
 		unsigned long numevents;
 
+		// Loner-Strike: no console to type into (started in the background, or under Wine as
+		// a Mac's servers are): nothing typed, not a fatal error. Valve's hlds does the same;
+		// the error stopped the server behind an error box nobody could see
 		if (!GetNumberOfConsoleInputEvents(hinput, &numevents))
-		{
-			if (m_System) {
-				m_System->Errorf("CTextConsoleWin32::GetLine: !GetNumberOfConsoleInputEvents\n");
-			}
-
 			return nullptr;
-		}
 
 		if (numevents <= 0)
 			break;
 
 		if (!ReadConsoleInput(hinput, recs, ARRAYSIZE(recs), &numread))
-		{
-			if (m_System) {
-				m_System->Errorf("CTextConsoleWin32::GetLine: !ReadConsoleInput\n");
-			}
-
 			return nullptr;
-		}
 
 		if (numread == 0)
 			return nullptr;
