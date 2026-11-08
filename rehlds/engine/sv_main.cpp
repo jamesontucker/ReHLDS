@@ -8128,6 +8128,7 @@ void EXT_FUNC SV_Frame_Internal()
 	g_psv.oldtime = g_psv.time;
 	SV_CheckCmdTimes();
 	SV_ReadPackets();
+	LsVoice_Frame();	// Loner-Strike: who is talking
 	if (SV_IsSimulating())
 	{
 		SV_Physics();
@@ -8266,6 +8267,7 @@ void SV_Init(void)
 
 	Cvar_RegisterVariable(&sv_failuretime);
 	Cvar_RegisterVariable(&sv_voiceenable);
+	Cvar_RegisterVariable(&sv_ls_voice);	// Loner-Strike
 	Cvar_RegisterVariable(&rcon_password);
 	Cvar_RegisterVariable(&sv_enableoldqueries);
 	Cvar_RegisterVariable(&mp_consistency);

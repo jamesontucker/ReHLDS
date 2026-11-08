@@ -60,6 +60,65 @@ cvar_t sv_unlagsamples = { "sv_unlagsamples", "1", 0, 0.0f, NULL };
 cvar_t mp_consistency = { "mp_consistency", "1", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_voiceenable = { "sv_voiceenable", "1", FCVAR_SERVER | FCVAR_ARCHIVE, 0.0f, NULL };
 
+// Loner-Strike: who is talking on voice, for the bots (gm_botchat). When a player starts and
+// stops talking (and every 10 s of a long one), the engine runs
+//   gm_voice <player index> start|still|stop <seconds> <bytes>
+// if a plugin has registered that command. sv_ls_voice 0 turns it off.
+cvar_t sv_ls_voice = { "sv_ls_voice", "1", FCVAR_SERVER, 0.0f, NULL };
+static double g_LsVoiceStart[MAX_CLIENTS], g_LsVoiceLast[MAX_CLIENTS], g_LsVoiceNoted[MAX_CLIENTS];
+static int g_LsVoiceBytes[MAX_CLIENTS];
+static bool g_LsVoiceOn[MAX_CLIENTS];
+#define LS_VOICE_GAP   0.6     // this long without a voice packet: they've stopped
+#define LS_VOICE_STILL 10.0    // a long one is reported every this many seconds
+
+static void LsVoice_Tell(int i, const char *what, double secs)
+{
+	if (!Cmd_Exists("gm_voice"))
+		return;
+	Cbuf_AddText(va("gm_voice %d %s %.1f %d\n", i + 1, what, secs, g_LsVoiceBytes[i]));
+}
+
+// A voice packet from a player
+static void LsVoice_Packet(client_t *cl, int bytes)
+{
+	if (sv_ls_voice.value == 0.0f || cl->fakeclient)
+		return;
+	int i = cl - g_psvs.clients;
+	if (i < 0 || i >= MAX_CLIENTS)
+		return;
+	if (!g_LsVoiceOn[i])
+	{
+		g_LsVoiceOn[i] = true;
+		g_LsVoiceStart[i] = g_LsVoiceNoted[i] = realtime;
+		g_LsVoiceBytes[i] = 0;
+		LsVoice_Tell(i, "start", 0.0);
+	}
+	g_LsVoiceLast[i] = realtime;
+	g_LsVoiceBytes[i] += bytes;
+}
+
+// Each frame: who has stopped, who is still going
+void LsVoice_Frame()
+{
+	for (int i = 0; i < g_psvs.maxclients && i < MAX_CLIENTS; i++)
+	{
+		if (!g_LsVoiceOn[i])
+			continue;
+		client_t *cl = &g_psvs.clients[i];
+		if (!cl->active || sv_ls_voice.value == 0.0f || realtime - g_LsVoiceLast[i] > LS_VOICE_GAP)
+		{
+			g_LsVoiceOn[i] = false;
+			if (cl->active)
+				LsVoice_Tell(i, "stop", g_LsVoiceLast[i] - g_LsVoiceStart[i]);
+		}
+		else if (realtime - g_LsVoiceNoted[i] >= LS_VOICE_STILL)
+		{
+			g_LsVoiceNoted[i] = realtime;
+			LsVoice_Tell(i, "still", realtime - g_LsVoiceStart[i]);
+		}
+	}
+}
+
 clc_func_t sv_clcfuncs[] = {
 	{ clc_bad,             "clc_bad",             nullptr                      },
 	{ clc_nop,             "clc_nop",             nullptr                      },
@@ -1760,6 +1819,9 @@ void SV_ParseVoiceData(client_t *cl)
 
 	MSG_ReadBuf(nDataLength, chReceived);
 	cl->m_lastvoicetime = g_psv.time;
+
+	// Loner-Strike: who is talking
+	LsVoice_Packet(cl, nDataLength);
 
 	if (sv_voiceenable.value == 0.0f)
 		return;
