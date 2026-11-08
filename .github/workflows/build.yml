@@ -102,6 +102,9 @@ jobs:
           mkdir publish\tests
           mkdir publish\bin\win32\valve\dlls
           move "msvc\${{ env.buildReleasePlay }}\swds.dll" publish\tests\swds.dll
+          # Loner-Strike: the steam_api.dll this engine is built against (as upstream's 25th
+          # anniversary branch ships it): Valve's current one no longer has SteamApps() and co.
+          copy rehlds\lib\steam_api.dll publish\bin\win32\steam_api.dll
           
           move msvc\${{ env.buildRelease }}\hlds.exe publish\bin\win32\hlds.exe
           move msvc\${{ env.buildRelease }}\hltv.exe publish\bin\win32\hltv.exe
@@ -351,6 +354,8 @@ jobs:
       - name: Move files
         run: |
           mkdir -p publish/bin/linux32/valve/dlls		  
+          # Loner-Strike: the libsteam_api.so this engine is built against (see the Windows step)
+          cp rehlds/lib/linux32/libsteam_api.so publish/bin/linux32/libsteam_api.so
           
           mv build/rehlds/engine_i486.so publish/bin/linux32/engine_i486.so
           mv rehlds/version/appversion.h publish/appversion.h
