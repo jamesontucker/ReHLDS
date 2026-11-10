@@ -192,7 +192,7 @@ static void LsVoice_PlayFrame()
 		Q_memcpy(&n, &g_LsVoicePlay[g_LsVoicePlayAt + 4], 2);
 		if (realtime - g_LsVoicePlayStart < at)
 			return;
-		const unsigned char *data = &g_LsVoicePlay[g_LsVoicePlayAt + 6];
+		unsigned char *data = &g_LsVoicePlay[g_LsVoicePlayAt + 6];
 		if (g_LsVoicePlayAt + 6 + n > g_LsVoicePlayLen)
 			break;
 		for (int i = 0; i < g_psvs.maxclients; i++)
