@@ -8438,6 +8438,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_failuretime);
 	Cvar_RegisterVariable(&sv_voiceenable);
 	Cvar_RegisterVariable(&sv_ls_voice);	// Loner-Strike
+	LsVoice_Init();
 	Cvar_RegisterVariable(&rcon_password);
 	Cvar_RegisterVariable(&sv_enableoldqueries);
 	Cvar_RegisterVariable(&mp_consistency);

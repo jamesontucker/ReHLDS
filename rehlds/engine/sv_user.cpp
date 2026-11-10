@@ -97,9 +97,133 @@ static void LsVoice_Packet(client_t *cl, int bytes)
 	g_LsVoiceBytes[i] += bytes;
 }
 
+// Loner-Strike (testing bots on voice): sv_ls_voice_record <file> saves every voice packet
+// players send (when it came, its length, its bytes; after a header naming the codec), and
+// ls_voice_play <player number> <file> sends them out again, at the same pace, as if that
+// player (a bot) were talking. Off unless used; for finding out what clients accept.
+cvar_t sv_ls_voice_record = { "sv_ls_voice_record", "", 0, 0.0f, NULL };
+static FILE *g_LsVoiceRec = NULL;
+static char g_LsVoiceRecName[260];
+static double g_LsVoiceRecStart;
+
+static void LsVoice_Record(client_t *cl, const char *data, int len)
+{
+	const char *want = sv_ls_voice_record.string;
+	if (!want || !want[0] || cl->fakeclient)
+	{
+		if (g_LsVoiceRec)
+		{
+			fclose(g_LsVoiceRec);
+			g_LsVoiceRec = NULL;
+		}
+		return;
+	}
+	if (!g_LsVoiceRec || Q_strcmp(g_LsVoiceRecName, want) != 0)
+	{
+		if (g_LsVoiceRec)
+			fclose(g_LsVoiceRec);
+		Q_strncpy(g_LsVoiceRecName, want, sizeof(g_LsVoiceRecName) - 1);
+		g_LsVoiceRecName[sizeof(g_LsVoiceRecName) - 1] = 0;
+		g_LsVoiceRec = fopen(g_LsVoiceRecName, "wb");
+		if (!g_LsVoiceRec)
+			return;
+		g_LsVoiceRecStart = realtime;
+		char head[128];
+		cvar_t *codec = Cvar_FindVar("sv_voicecodec");
+		cvar_t *quality = Cvar_FindVar("sv_voicequality");
+		int n = Q_snprintf(head, sizeof(head), "LSVOICE1 %s %s\n", codec ? codec->string : "?", quality ? quality->string : "?");
+		fwrite(head, 1, n, g_LsVoiceRec);
+	}
+	float at = float(realtime - g_LsVoiceRecStart);
+	unsigned short n = (unsigned short)len;
+	fwrite(&at, sizeof(at), 1, g_LsVoiceRec);
+	fwrite(&n, sizeof(n), 1, g_LsVoiceRec);
+	fwrite(data, 1, len, g_LsVoiceRec);
+	fflush(g_LsVoiceRec);
+}
+
+#define LS_VOICE_PLAY_MAX (2 * 1024 * 1024)
+static unsigned char g_LsVoicePlay[LS_VOICE_PLAY_MAX];
+static int g_LsVoicePlayLen, g_LsVoicePlayAt, g_LsVoicePlaySender = -1;
+static double g_LsVoicePlayStart;
+
+static void LsVoice_Play_f()
+{
+	if (Cmd_Argc() < 3)
+	{
+		Con_Printf("ls_voice_play <player number> <file>: plays a voice recording as that player\n");
+		return;
+	}
+	int who = Q_atoi(Cmd_Argv(1)) - 1;
+	if (who < 0 || who >= g_psvs.maxclients || !g_psvs.clients[who].active)
+	{
+		Con_Printf("ls_voice_play: no player %s\n", Cmd_Argv(1));
+		return;
+	}
+	FILE *f = fopen(Cmd_Argv(2), "rb");
+	if (!f)
+	{
+		Con_Printf("ls_voice_play: can't open %s\n", Cmd_Argv(2));
+		return;
+	}
+	g_LsVoicePlayLen = (int)fread(g_LsVoicePlay, 1, LS_VOICE_PLAY_MAX, f);
+	fclose(f);
+	// (past the header line)
+	g_LsVoicePlayAt = 0;
+	while (g_LsVoicePlayAt < g_LsVoicePlayLen && g_LsVoicePlay[g_LsVoicePlayAt] != '\n')
+		g_LsVoicePlayAt++;
+	g_LsVoicePlayAt++;
+	g_LsVoicePlaySender = who;
+	g_LsVoicePlayStart = realtime;
+	Con_Printf("ls_voice_play: %d bytes as %s\n", g_LsVoicePlayLen, g_psvs.clients[who].name);
+}
+
+// The recording's packets that are due, out to everyone else as the sender's voice
+static void LsVoice_PlayFrame()
+{
+	if (g_LsVoicePlaySender < 0)
+		return;
+	int sender = g_LsVoicePlaySender;
+	while (g_LsVoicePlayAt + 6 <= g_LsVoicePlayLen)
+	{
+		float at;
+		unsigned short n;
+		Q_memcpy(&at, &g_LsVoicePlay[g_LsVoicePlayAt], 4);
+		Q_memcpy(&n, &g_LsVoicePlay[g_LsVoicePlayAt + 4], 2);
+		if (realtime - g_LsVoicePlayStart < at)
+			return;
+		const unsigned char *data = &g_LsVoicePlay[g_LsVoicePlayAt + 6];
+		if (g_LsVoicePlayAt + 6 + n > g_LsVoicePlayLen)
+			break;
+		for (int i = 0; i < g_psvs.maxclients; i++)
+		{
+			client_t *dest = &g_psvs.clients[i];
+			if (i == sender || !dest->active || dest->fakeclient)
+				continue;
+			if (dest->datagram.cursize + n + 6 < dest->datagram.maxsize)
+			{
+				MSG_WriteByte(&dest->datagram, svc_voicedata);
+				MSG_WriteByte(&dest->datagram, sender);
+				MSG_WriteShort(&dest->datagram, n);
+				MSG_WriteBuf(&dest->datagram, n, data);
+			}
+		}
+		g_LsVoicePlayAt += 6 + n;
+	}
+	Con_Printf("ls_voice_play: done\n");
+	g_LsVoicePlaySender = -1;
+}
+
+void LsVoice_Init()
+{
+	Cvar_RegisterVariable(&sv_ls_voice_record);
+	Cmd_AddCommand("ls_voice_play", LsVoice_Play_f);
+}
+
 // Each frame: who has stopped, who is still going
 void LsVoice_Frame()
 {
+	LsVoice_PlayFrame();
 	for (int i = 0; i < g_psvs.maxclients && i < MAX_CLIENTS; i++)
 	{
 		if (!g_LsVoiceOn[i])
@@ -1840,8 +1964,9 @@ void SV_ParseVoiceData(client_t *cl)
 	MSG_ReadBuf(nDataLength, chReceived);
 	cl->m_lastvoicetime = g_psv.time;
 
-	// Loner-Strike: who is talking
+	// Loner-Strike: who is talking (and, testing, what they said)
 	LsVoice_Packet(cl, nDataLength);
+	LsVoice_Record(cl, chReceived, nDataLength);
 
 	if (sv_voiceenable.value == 0.0f)
 		return;
