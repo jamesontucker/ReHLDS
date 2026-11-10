@@ -396,6 +396,9 @@ jobs:
     name: 'Publish'
     runs-on: ubuntu-24.04
     needs: [windows, testdemos, linux]
+    # (upstream's: it signs with upstream's key, which a fork doesn't have; Loner-Strike's
+    # releases are packed from the branch build by scripts/fork-release.sh)
+    if: github.repository == 'rehlds/ReHLDS'
 
     steps:
       - name: Deploying linux artifacts
