@@ -75,7 +75,7 @@ extern cvar_t mp_consistency;
 extern cvar_t sv_voiceenable;
 extern cvar_t sv_ls_voice;	// Loner-Strike
 void LsVoice_Frame();		// Loner-Strike
-void LsVoice_Init();		// Loner-Strike (testing bots on voice)
+void LsVoice_Init();		// Loner-Strike (sv_ls_voice_feed: voice to the speech-to-text helper)
 
 extern qboolean nofind;
 

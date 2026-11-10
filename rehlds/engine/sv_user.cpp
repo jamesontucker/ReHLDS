@@ -97,133 +97,46 @@ static void LsVoice_Packet(client_t *cl, int bytes)
 	g_LsVoiceBytes[i] += bytes;
 }
 
-// Loner-Strike (testing bots on voice): sv_ls_voice_record <file> saves every voice packet
-// players send (when it came, its length, its bytes; after a header naming the codec), and
-// ls_voice_play <player number> <file> sends them out again, at the same pace, as if that
-// player (a bot) were talking. Off unless used; for finding out what clients accept.
-cvar_t sv_ls_voice_record = { "sv_ls_voice_record", "", 0, 0.0f, NULL };
-static FILE *g_LsVoiceRec = NULL;
-static char g_LsVoiceRecName[260];
-static double g_LsVoiceRecStart;
+// Loner-Strike: sv_ls_voice_feed <port> (0, the default: off) hands every voice packet a
+// player sends to the server's voice helper on this machine, 127.0.0.1:<port> and nowhere
+// else, for speech to text (the app's Advanced Bot Interaction): "LSV1", the player's slot
+// (1 byte), their userid (4 bytes, little-endian), then the packet as the client sent it. The
+// helper answers through rcon (gm_botchat_ask), as any admin tool would.
+cvar_t sv_ls_voice_feed = { "sv_ls_voice_feed", "0", 0, 0.0f, NULL };
 
-static void LsVoice_Record(client_t *cl, const char *data, int len)
+static void LsVoice_Feed(client_t *cl, const char *data, int len)
 {
-	const char *want = sv_ls_voice_record.string;
-	if (!want || !want[0] || cl->fakeclient)
-	{
-		if (g_LsVoiceRec)
-		{
-			fclose(g_LsVoiceRec);
-			g_LsVoiceRec = NULL;
-		}
+	int port = (int)sv_ls_voice_feed.value;
+	if (port <= 0 || port > 65535 || cl->fakeclient || !cl->active || len <= 0 || len > 4096)
 		return;
-	}
-	if (!g_LsVoiceRec || Q_strcmp(g_LsVoiceRecName, want) != 0)
+	static int s_port = 0;
+	static netadr_t s_to;
+	if (port != s_port)
 	{
-		if (g_LsVoiceRec)
-			fclose(g_LsVoiceRec);
-		Q_strncpy(g_LsVoiceRecName, want, sizeof(g_LsVoiceRecName) - 1);
-		g_LsVoiceRecName[sizeof(g_LsVoiceRecName) - 1] = 0;
-		g_LsVoiceRec = fopen(g_LsVoiceRecName, "wb");
-		if (!g_LsVoiceRec)
+		if (!NET_StringToAdr(va("127.0.0.1:%d", port), &s_to))
 			return;
-		g_LsVoiceRecStart = realtime;
-		char head[128];
-		cvar_t *codec = Cvar_FindVar("sv_voicecodec");
-		cvar_t *quality = Cvar_FindVar("sv_voicequality");
-		int n = Q_snprintf(head, sizeof(head), "LSVOICE1 %s %s\n", codec ? codec->string : "?", quality ? quality->string : "?");
-		fwrite(head, 1, n, g_LsVoiceRec);
+		s_port = port;
 	}
-	float at = float(realtime - g_LsVoiceRecStart);
-	unsigned short n = (unsigned short)len;
-	fwrite(&at, sizeof(at), 1, g_LsVoiceRec);
-	fwrite(&n, sizeof(n), 1, g_LsVoiceRec);
-	fwrite(data, 1, len, g_LsVoiceRec);
-	fflush(g_LsVoiceRec);
-}
-
-#define LS_VOICE_PLAY_MAX (2 * 1024 * 1024)
-static unsigned char g_LsVoicePlay[LS_VOICE_PLAY_MAX];
-static int g_LsVoicePlayLen, g_LsVoicePlayAt, g_LsVoicePlaySender = -1;
-static double g_LsVoicePlayStart;
-
-static void LsVoice_Play_f()
-{
-	if (Cmd_Argc() < 3)
-	{
-		Con_Printf("ls_voice_play <player number> <file>: plays a voice recording as that player\n");
-		return;
-	}
-	int who = Q_atoi(Cmd_Argv(1)) - 1;
-	if (who < 0 || who >= g_psvs.maxclients || !g_psvs.clients[who].active)
-	{
-		Con_Printf("ls_voice_play: no player %s\n", Cmd_Argv(1));
-		return;
-	}
-	FILE *f = fopen(Cmd_Argv(2), "rb");
-	if (!f)
-	{
-		Con_Printf("ls_voice_play: can't open %s\n", Cmd_Argv(2));
-		return;
-	}
-	g_LsVoicePlayLen = (int)fread(g_LsVoicePlay, 1, LS_VOICE_PLAY_MAX, f);
-	fclose(f);
-	// (past the header line)
-	g_LsVoicePlayAt = 0;
-	while (g_LsVoicePlayAt < g_LsVoicePlayLen && g_LsVoicePlay[g_LsVoicePlayAt] != '\n')
-		g_LsVoicePlayAt++;
-	g_LsVoicePlayAt++;
-	g_LsVoicePlaySender = who;
-	g_LsVoicePlayStart = realtime;
-	Con_Printf("ls_voice_play: %d bytes as %s\n", g_LsVoicePlayLen, g_psvs.clients[who].name);
-}
-
-// The recording's packets that are due, out to everyone else as the sender's voice
-static void LsVoice_PlayFrame()
-{
-	if (g_LsVoicePlaySender < 0)
-		return;
-	int sender = g_LsVoicePlaySender;
-	while (g_LsVoicePlayAt + 6 <= g_LsVoicePlayLen)
-	{
-		float at;
-		unsigned short n;
-		Q_memcpy(&at, &g_LsVoicePlay[g_LsVoicePlayAt], 4);
-		Q_memcpy(&n, &g_LsVoicePlay[g_LsVoicePlayAt + 4], 2);
-		if (realtime - g_LsVoicePlayStart < at)
-			return;
-		unsigned char *data = &g_LsVoicePlay[g_LsVoicePlayAt + 6];
-		if (g_LsVoicePlayAt + 6 + n > g_LsVoicePlayLen)
-			break;
-		for (int i = 0; i < g_psvs.maxclients; i++)
-		{
-			client_t *dest = &g_psvs.clients[i];
-			if (i == sender || !dest->active || dest->fakeclient)
-				continue;
-			if (dest->datagram.cursize + n + 6 < dest->datagram.maxsize)
-			{
-				MSG_WriteByte(&dest->datagram, svc_voicedata);
-				MSG_WriteByte(&dest->datagram, sender);
-				MSG_WriteShort(&dest->datagram, n);
-				MSG_WriteBuf(&dest->datagram, n, data);
-			}
-		}
-		g_LsVoicePlayAt += 6 + n;
-	}
-	Con_Printf("ls_voice_play: done\n");
-	g_LsVoicePlaySender = -1;
+	static unsigned char buf[9 + 4096];
+	Q_memcpy(buf, "LSV1", 4);
+	buf[4] = (unsigned char)(cl - g_psvs.clients + 1);
+	unsigned int uid = (unsigned int)cl->userid;
+	buf[5] = uid & 0xFF;
+	buf[6] = (uid >> 8) & 0xFF;
+	buf[7] = (uid >> 16) & 0xFF;
+	buf[8] = (uid >> 24) & 0xFF;
+	Q_memcpy(buf + 9, data, len);
+	NET_SendPacket(NS_SERVER, 9 + len, buf, s_to);
 }
 
 void LsVoice_Init()
 {
-	Cvar_RegisterVariable(&sv_ls_voice_record);
-	Cmd_AddCommand("ls_voice_play", LsVoice_Play_f);
+	Cvar_RegisterVariable(&sv_ls_voice_feed);
 }
 
 // Each frame: who has stopped, who is still going
 void LsVoice_Frame()
 {
-	LsVoice_PlayFrame();
 	for (int i = 0; i < g_psvs.maxclients && i < MAX_CLIENTS; i++)
 	{
 		if (!g_LsVoiceOn[i])
@@ -1966,7 +1879,7 @@ void SV_ParseVoiceData(client_t *cl)
 
 	// Loner-Strike: who is talking (and, testing, what they said)
 	LsVoice_Packet(cl, nDataLength);
-	LsVoice_Record(cl, chReceived, nDataLength);
+	LsVoice_Feed(cl, chReceived, nDataLength);
 
 	if (sv_voiceenable.value == 0.0f)
 		return;
