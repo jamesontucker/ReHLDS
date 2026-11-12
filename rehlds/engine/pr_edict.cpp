@@ -319,6 +319,35 @@ char *ED_ParseEdict(char *data, edict_t *ent)
 			gEntityInterface.pfnKeyValue(ent, &kvd);
 		}
 	}
+	else
+	{
+		// Loner-Strike: an entity with no classname (the Half-Life 25th anniversary update pads
+		// stock maps such as de_survivor, cs_siege and cs_747 with a "file_padding" entity): its
+		// keys are read past to its closing brace and it isn't spawned, as the current Valve
+		// engine does. Left where it was, the next read found "file_padding" where a { belongs
+		// and the map didn't load.
+		while (true)
+		{
+			data = COM_Parse(data);
+			if (!data)
+			{
+				Host_Error("%s: EOF without closing brace", __func__);
+			}
+			if (com_token[0] == '}')
+			{
+				break;
+			}
+			data = COM_Parse(data);
+			if (!data)
+			{
+				Host_Error("%s: EOF without closing brace", __func__);
+			}
+			if (com_token[0] == '}')
+			{
+				Host_Error("%s: closing brace without data", __func__);
+			}
+		}
+	}
 
 	if (!init)
 	{
