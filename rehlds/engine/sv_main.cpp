@@ -3629,16 +3629,19 @@ int SV_Rcon_Validate(void)
 
 // A client issued an rcom command
 // Shift down the remaining args and redirect all Con_Printf
-// Loner-Strike: " <challenge> <password> <command>" as it is for the logs, with the password
+// Loner-Strike: "rcon <challenge> <password> <command>" as it is for the logs, with the password
 // (quoted or not) as "***"; the challenge and the command stay for auditing
 void SV_RconMaskPassword(const char *in, char *out, int size)
 {
 	int o = 0;
 	const char *p = in;
 	auto put = [&](char c) { if (o < size - 1) out[o++] = c; };
-	while (*p == ' ' || *p == '\t') put(*p++);					// spaces
-	while (*p && *p != ' ' && *p != '\t') put(*p++);			// the challenge
-	while (*p == ' ' || *p == '\t') put(*p++);					// spaces
+	for (int word = 0; word < 2; word++)						// "rcon" and the challenge
+	{
+		while (*p == ' ' || *p == '\t') put(*p++);
+		while (*p && *p != ' ' && *p != '\t') put(*p++);
+	}
+	while (*p == ' ' || *p == '\t') put(*p++);
 	if (*p == '"')
 	{
 		p++;
