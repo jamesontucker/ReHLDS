@@ -248,9 +248,6 @@ cvar_t listipcfgfile = { "listipcfgfile", "listip.cfg", 0, 0.0f, nullptr };
 cvar_t syserror_logfile = { "syserror_logfile", "sys_error.log", 0, 0.0f, nullptr };
 cvar_t sv_rehlds_hull_centering = { "sv_rehlds_hull_centering", "0", 0, 0.0f, nullptr };
 cvar_t sv_rcon_condebug = { "sv_rcon_condebug", "1", 0, 1.0f, nullptr };
-// Loner-Strike: the RCON password shown as *** in the console, qconsole.log and the logs (the
-// "Rcon from" / "Bad Rcon" lines); 0 = shown as sent, as before
-cvar_t sv_rcon_mask_password = { "sv_rcon_mask_password", "1", 0, 1.0f, nullptr };
 cvar_t sv_rehlds_userinfo_transmitted_fields = { "sv_rehlds_userinfo_transmitted_fields", "", 0, 0.0f, nullptr };
 cvar_t sv_rehlds_attachedentities_playeranimationspeed_fix = {"sv_rehlds_attachedentities_playeranimationspeed_fix", "0", 0, 0.0f, nullptr};
 cvar_t sv_rehlds_local_gametime = {"sv_rehlds_local_gametime", "0", 0, 0.0f, nullptr};
@@ -260,6 +257,11 @@ cvar_t sv_use_entity_file = { "sv_use_entity_file", "0", 0, 0.0f, nullptr };
 cvar_t sv_usercmd_custom_random_seed = { "sv_usercmd_custom_random_seed", "0", 0, 0.0f, nullptr };
 cvar_t sv_rehlds_allow_large_sprays = { "sv_rehlds_allow_large_sprays", "1", 0, 1.0f, nullptr };
 #endif
+
+// Loner-Strike: the RCON password shown as *** in the console, qconsole.log and the logs (the
+// "Rcon from" / "Bad Rcon" lines); 0 = shown as sent, as before (every build,
+// with or without REHLDS_FIXES)
+cvar_t sv_rcon_mask_password = { "sv_rcon_mask_password", "1", 0, 1.0f, nullptr };
 
 delta_t *SV_LookupDelta(char *name)
 {
@@ -8440,6 +8442,7 @@ void SV_InitEncoders(void)
 
 void SV_Init(void)
 {
+	Cvar_RegisterVariable(&sv_rcon_mask_password);	// Loner-Strike (every build)
 	Cmd_AddCommand("banid", SV_BanId_f);
 	Cmd_AddCommand("removeid", SV_RemoveId_f);
 	Cmd_AddCommand("listid", SV_ListId_f);
@@ -8574,7 +8577,6 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_rehlds_force_dlmax);
 	Cvar_RegisterVariable(&sv_rehlds_hull_centering);
 	Cvar_RegisterVariable(&sv_rcon_condebug);
-	Cvar_RegisterVariable(&sv_rcon_mask_password);
 	Cvar_RegisterVariable(&sv_rehlds_userinfo_transmitted_fields);
 	Cvar_RegisterVariable(&sv_rehlds_attachedentities_playeranimationspeed_fix);
 	Cvar_RegisterVariable(&sv_rehlds_local_gametime);
