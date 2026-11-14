@@ -64,6 +64,7 @@ This means that plugins that do binary code analysis (Orpheu for example) probab
 <li>sv_delayed_spray_upload &lt;1|0&gt; // Upload custom sprays after entering the game instead of when connecting. It increases upload speed. Default: 0
 <li>sv_echo_unknown_cmd &lt;1|0&gt; // Echo in the console when trying execute an unknown command. Default: 0
 <li>sv_rcon_condebug &lt;1|0&gt; // Print rcon debug in the console. Default: 1
+<li>sv_rcon_mask_password &lt;1|0&gt; // (Loner-Strike) Show the RCON password as *** in the "Rcon from" / "Bad Rcon" console and log lines (the challenge and command stay). RCON itself is unchanged. Default: 1
 <li>sv_force_ent_intersection &lt;1|0&gt; // In a 3-rd party plugins used to force colliding of SOLID_SLIDEBOX entities. Default: 0
 <li>sv_rehlds_force_dlmax &lt;1|0&gt; // Force a client's cl_dlmax cvar to 1024. It avoids an excessive packets fragmentation. Default: 0
 <li>sv_rehlds_hull_centering &lt;1|0&gt; // Use center of hull instead of corner. Default: 0

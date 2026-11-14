@@ -248,6 +248,9 @@ cvar_t listipcfgfile = { "listipcfgfile", "listip.cfg", 0, 0.0f, nullptr };
 cvar_t syserror_logfile = { "syserror_logfile", "sys_error.log", 0, 0.0f, nullptr };
 cvar_t sv_rehlds_hull_centering = { "sv_rehlds_hull_centering", "0", 0, 0.0f, nullptr };
 cvar_t sv_rcon_condebug = { "sv_rcon_condebug", "1", 0, 1.0f, nullptr };
+// Loner-Strike: the RCON password shown as *** in the console, qconsole.log and the logs (the
+// "Rcon from" / "Bad Rcon" lines); 0 = shown as sent, as before
+cvar_t sv_rcon_mask_password = { "sv_rcon_mask_password", "1", 0, 1.0f, nullptr };
 cvar_t sv_rehlds_userinfo_transmitted_fields = { "sv_rehlds_userinfo_transmitted_fields", "", 0, 0.0f, nullptr };
 cvar_t sv_rehlds_attachedentities_playeranimationspeed_fix = {"sv_rehlds_attachedentities_playeranimationspeed_fix", "0", 0, 0.0f, nullptr};
 cvar_t sv_rehlds_local_gametime = {"sv_rehlds_local_gametime", "0", 0, 0.0f, nullptr};
@@ -3624,6 +3627,32 @@ int SV_Rcon_Validate(void)
 
 // A client issued an rcom command
 // Shift down the remaining args and redirect all Con_Printf
+// Loner-Strike: " <challenge> <password> <command>" as it is for the logs, with the password
+// (quoted or not) as "***"; the challenge and the command stay for auditing
+void SV_RconMaskPassword(const char *in, char *out, int size)
+{
+	int o = 0;
+	const char *p = in;
+	auto put = [&](char c) { if (o < size - 1) out[o++] = c; };
+	while (*p == ' ' || *p == '\t') put(*p++);					// spaces
+	while (*p && *p != ' ' && *p != '\t') put(*p++);			// the challenge
+	while (*p == ' ' || *p == '\t') put(*p++);					// spaces
+	if (*p == '"')
+	{
+		p++;
+		while (*p && *p != '"') p++;
+		if (*p == '"') p++;
+		put('"'); put('*'); put('*'); put('*'); put('"');
+	}
+	else if (*p)
+	{
+		while (*p && *p != ' ' && *p != '\t') p++;
+		put('*'); put('*'); put('*');
+	}
+	while (*p) put(*p++);										// the command, as sent
+	out[o] = 0;
+}
+
 void SV_Rcon(netadr_t *net_from_)
 {
 	int		invalid;
@@ -3645,15 +3674,22 @@ void SV_Rcon(netadr_t *net_from_)
 	if (sv_rcon_condebug.value > 0.0f)
 #endif
 	{
+		// (only what's printed changes; rcon_buff itself is what's checked and run below)
+		char shown[sizeof(rcon_buff)];
+		if (sv_rcon_mask_password.value > 0.0f)
+			SV_RconMaskPassword(rcon_buff, shown, sizeof(shown));
+		else
+			Q_strlcpy(shown, rcon_buff);
+
 		if (invalid != RCON_RESULT_SUCCESS)
 		{
-			Con_Printf("Bad Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), rcon_buff);
-			Log_Printf("Bad Rcon: \"%s\" from \"%s\"\n", rcon_buff, NET_AdrToString(*net_from_));
+			Con_Printf("Bad Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), shown);
+			Log_Printf("Bad Rcon: \"%s\" from \"%s\"\n", shown, NET_AdrToString(*net_from_));
 		}
 		else
 		{
-			Con_Printf("Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), rcon_buff);
-			Log_Printf("Rcon: \"%s\" from \"%s\"\n", rcon_buff, NET_AdrToString(*net_from_));
+			Con_Printf("Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), shown);
+			Log_Printf("Rcon: \"%s\" from \"%s\"\n", shown, NET_AdrToString(*net_from_));
 		}
 	}
 
@@ -8538,6 +8574,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_rehlds_force_dlmax);
 	Cvar_RegisterVariable(&sv_rehlds_hull_centering);
 	Cvar_RegisterVariable(&sv_rcon_condebug);
+	Cvar_RegisterVariable(&sv_rcon_mask_password);
 	Cvar_RegisterVariable(&sv_rehlds_userinfo_transmitted_fields);
 	Cvar_RegisterVariable(&sv_rehlds_attachedentities_playeranimationspeed_fix);
 	Cvar_RegisterVariable(&sv_rehlds_local_gametime);
