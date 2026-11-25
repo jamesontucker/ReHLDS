@@ -925,5 +925,10 @@ void Master_SetMaster_f()
 
 void Steam_HandleIncomingPacket(byte *data, int len, int fromip, uint16 port)
 {
-	CRehldsPlatformHolder::get()->SteamGameServer()->HandleIncomingPacket(data, len, fromip, port);
+	// Loner-Strike: no Steam game server (Steam didn't start, or not yet / any more) - a packet
+	// arriving then crashed the server on a null pointer (seen on a Linux server, 2026-11-24)
+	ISteamGameServer *steam = CRehldsPlatformHolder::get()->SteamGameServer();
+	if (!steam)
+		return;
+	steam->HandleIncomingPacket(data, len, fromip, port);
 }
